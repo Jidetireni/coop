@@ -1,31 +1,31 @@
 package routers
 
 import (
-	config "cooperative-system/conf"
-	"cooperative-system/middleware"
-	v1 "cooperative-system/routers/api/v1"
+	"cooperative-system/internal/config"
+	"cooperative-system/internal/handlers"
+	"cooperative-system/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-type Handlers struct {
-	MemberService  v1.MemberService
-	UserService    v1.UserService
-	SavingsService v1.SavingsService
+type servicehandlers struct {
+	UserService    handlers.UserService
+	MemberService  handlers.MemberService
+	SavingsService handlers.SavingsService
 }
 
-func NewHandlers(db *gorm.DB) *Handlers {
-	return &Handlers{
-		MemberService:  &v1.MemberHandler{DB: db},
-		UserService:    &v1.UserHandler{DB: db},
-		SavingsService: &v1.SavingsHandler{DB: db},
+func Newhandlers(db *gorm.DB) *servicehandlers {
+	return &servicehandlers{
+		UserService:    &handlers.UserHandler{DB: db},
+		MemberService:  &handlers.MemberHandler{DB: db},
+		SavingsService: &handlers.SavingsHandler{DB: db},
 	}
 }
 
 func SetUpRoute(router *gin.Engine) {
 	db := config.DB
-	handler := NewHandlers(db)
+	handler := Newhandlers(db)
 
 	router.POST("/signup", handler.UserService.Signup)
 	router.POST("/login", handler.UserService.Login)
@@ -53,7 +53,7 @@ func SetUpRoute(router *gin.Engine) {
 	adminGroup := router.Group("/api/v1/admins")
 	adminGroup.Use(middleware.RequireAuth, middleware.RequireAdmin)
 	{
-		adminGroup.POST("", v1.CreateAdmin)
+		adminGroup.POST("", handlers.CreateAdmin)
 		adminGroup.GET("/members", handler.MemberService.GetAllMembers)
 		adminGroup.GET("/savings/:id", handler.SavingsService.GetTransactionsForMember)
 	}

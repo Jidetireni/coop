@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	config "cooperative-system/conf"
-	"cooperative-system/models"
+	"cooperative-system/internal/config"
+	"cooperative-system/internal/models"
 	"cooperative-system/pkg/util"
 	"net/http"
 

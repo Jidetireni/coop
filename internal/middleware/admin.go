@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"cooperative-system/models"
+	"cooperative-system/internal/models"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

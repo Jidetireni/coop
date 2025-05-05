@@ -1,7 +1,7 @@
-package v1
+package handlers
 
 import (
-	"cooperative-system/models"
+	"cooperative-system/internal/models"
 	"cooperative-system/pkg/util"
 
 	"fmt"

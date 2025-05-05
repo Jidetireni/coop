@@ -1,24 +1,6 @@
 package models
 
-import (
-	"gorm.io/gorm"
-)
-
-type User struct {
-	gorm.Model
-	Email    string `gorm:"unique"`
-	Password string `gorm:"not null"`
-	Role     string `gorm:"not null"`
-}
-
-type Member struct {
-	gorm.Model
-	UserID      uint   `gorm:"unique"`
-	Name        string `gorm:"not null"`
-	ContactInfo string `gorm:"not null"`
-	User        User
-	Savings     []Savings
-}
+import "gorm.io/gorm"
 
 type Savings struct {
 	gorm.Model
@@ -38,10 +20,4 @@ type SavingTransaction struct {
 	Description string
 	// TransactionDate time.Time
 	Savings Savings
-}
-
-type Admin struct {
-	gorm.Model
-	UserID uint
-	User   User
 }

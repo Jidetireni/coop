@@ -1,9 +1,11 @@
 package config
 
 import (
+	"cooperative-system/internal/models"
 	"log"
 	"os"
 
+	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -26,4 +28,18 @@ func ConnectDb() {
 
 	log.Println("database connected successfully")
 
+}
+
+func LoadEnvVars() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+}
+
+func SyncDB() {
+	DB.AutoMigrate(&models.User{})
+	DB.AutoMigrate(&models.Member{})
+	DB.AutoMigrate(&models.Savings{})
+	DB.AutoMigrate(&models.SavingTransaction{})
 }

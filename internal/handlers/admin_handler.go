@@ -1,8 +1,8 @@
-package v1
+package handlers
 
 import (
-	config "cooperative-system/conf"
-	"cooperative-system/models"
+	"cooperative-system/internal/config"
+	"cooperative-system/internal/models"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
