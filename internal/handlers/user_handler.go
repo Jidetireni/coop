@@ -2,9 +2,8 @@ package handlers
 
 import (
 	"cooperative-system/internal/models"
-	"cooperative-system/pkg/util"
-
-	"fmt"
+	"cooperative-system/internal/repository"
+	"cooperative-system/pkg/utils"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -15,138 +14,95 @@ import (
 type RequestBody struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
-	// Role     string `json:"role"`
 }
 
 type UserHandler struct {
-	DB *gorm.DB
+	UserRepo *repository.UserRepository
 }
 
-type UserService interface {
-	Signup(c *gin.Context)
-	Login(c *gin.Context)
+func NewUserHandler(db *gorm.DB) *UserHandler {
+	return &UserHandler{
+		UserRepo: repository.NewUserRepository(db),
+	}
 }
 
 func (u *UserHandler) Signup(c *gin.Context) {
-
-	// Get the email/pass off the req body
 	var reqBody RequestBody
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid request body",
-			"details": err.Error(),
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "invalid request body", err)
 		return
 	}
 
-	// Hash the password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(reqBody.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "failed to hash password",
-			"details": err.Error(),
-		})
+		utils.RespondWithError(c, http.StatusInternalServerError, "failed to hash password", err)
 		return
 	}
 
-	// Create the user
 	user := models.User{
 		Email:    reqBody.Email,
 		Password: string(hashedPassword),
 		Role:     "member",
 	}
 
-	if err := u.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "failed to create user",
-			"details": err.Error(),
-		})
+	if err := u.UserRepo.CreateUser(&user); err != nil {
+		utils.RespondWithError(c, http.StatusBadRequest, "failed to create user", err)
 		return
 	}
 
-	// Respond
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "user created suceesfully",
-	})
+	utils.SuccessResponse(c, http.StatusCreated, "user created successfully", "user", user)
 }
 
 func (u *UserHandler) Login(c *gin.Context) {
-	// Get the email and pass off the req body
 	var reqBody RequestBody
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid request body",
-			"details": err.Error(),
-		})
+		utils.RespondWithError(c, http.StatusBadRequest, "invalid request body", err)
 		return
 	}
 
-	// Look up requested user
-	var user models.User
-	u.DB.Where("email = ? ", reqBody.Email).First(&user)
-	if user.ID == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "user not found",
-		})
+	user, err := u.UserRepo.FindUserByEmail(reqBody.Email)
+	if err != nil || user.ID == 0 {
+		utils.RespondWithError(c, http.StatusUnauthorized, "user not found", err)
 		return
 	}
 
-	// Compare sent in pass with saved user pass hash
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(reqBody.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "incorrect paswword",
-			"details": err.Error(),
-		})
-	}
-
-	// generate a jwt token
-	tokenString, err := util.CreateToken(user.Email)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":   "unable to create token",
-			"details": err.Error(),
-		})
+		utils.RespondWithError(c, http.StatusUnauthorized, "incorrect password", err)
 		return
 	}
 
-	// send it back
+	tokenString, err := utils.CreateToken(user.Email)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusUnauthorized, "unable to create token", err)
+		return
+	}
+
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("Authorization", tokenString, 3600*24*30, "", "", false, true)
-	c.JSON(http.StatusOK, gin.H{
+	utils.SuccessResponse(c, http.StatusOK, "login successful", "data", gin.H{
 		"userID": user.ID,
 		"token":  tokenString,
 	})
-
 }
 
-func Validate(c *gin.Context) {
+// func Validate(c *gin.Context) {
+// 	user, exist := c.Get("user")
+// 	if !exist {
+// 		utils.RespondWithError(c, http.StatusInternalServerError, "unable to get user from token", nil)
+// 		return
+// 	}
 
-	user, exist := c.Get("user")
-	if !exist {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "unable to get user from token",
-		})
-		return
-	}
+// 	authUser, ok := user.(models.User)
+// 	if !ok {
+// 		utils.RespondWithError(c, http.StatusInternalServerError, "invalid user data in context", nil)
+// 		return
+// 	}
 
-	authUser, ok := user.(models.User)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "invalid user data in context",
-		})
-		return
-	}
+// 	userID := c.Param("id")
+// 	if userID != fmt.Sprintf("%v", authUser.ID) {
+// 		utils.RespondWithError(c, http.StatusForbidden, "user ID mismatch", nil)
+// 		return
+// 	}
 
-	userID := c.Param("id")
-	if userID != fmt.Sprintf("%v", authUser.ID) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "user ID mismatch",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "User validated successfully",
-		"user":    user,
-	})
-}
+// 	utils.SuccessResponse(c, http.StatusOK, "User validated successfully", "user", user)
+// }
