@@ -3,7 +3,7 @@ package middleware
 import (
 	"cooperative-system/internal/config"
 	"cooperative-system/internal/models"
-	"cooperative-system/pkg/util"
+	"cooperative-system/pkg/utils"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +21,7 @@ func RequireAuth(c *gin.Context) {
 	}
 
 	// verify the token extracted from the cookie
-	email, err := util.VerifyToken(tokenString)
+	email, err := utils.VerifyToken(tokenString)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"error":   "operation not allowed, could not verify token",
