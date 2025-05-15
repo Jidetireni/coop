@@ -2,7 +2,8 @@ package handlers
 
 import (
 	"cooperative-system/internal/models"
-	"errors"
+	"cooperative-system/internal/repository"
+	"cooperative-system/pkg/utils"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +16,17 @@ type CreateSavingRequest struct {
 }
 
 type SavingsHandler struct {
-	DB *gorm.DB
+	repo       *repository.SavingsRepository
+	DB         *gorm.DB // Add DB for legacy helpers like getMemberByIDAndAuthorize
+	MemberRepo *repository.MemberRepository
+}
+
+func NewSavingsHandler(db *gorm.DB) *SavingsHandler {
+	return &SavingsHandler{
+		repo:       repository.NewSavingsRepository(db),
+		DB:         db, // Set DB for legacy helpers
+		MemberRepo: repository.NewMemberRepository(db),
+	}
 }
 
 type SavingsService interface {
@@ -30,68 +41,59 @@ func (s *SavingsHandler) CreateSavings(c *gin.Context) {
 	// Get authenticated user from context
 	authUser, ok := getAuthUser(c)
 	if !ok {
-		respondWithError(c, http.StatusUnauthorized, "unauthenticated user", nil)
+		utils.RespondWithError(c, http.StatusUnauthorized, "unauthenticated user", nil)
 		return
 	}
 
-	// Find the member associated with the authenticated user
-	var member models.Member
-	if err := s.DB.Preload("User").Where("user_id = ?", authUser.ID).First(&member).Error; err != nil {
-		respondWithError(c, http.StatusNotFound, "failed to find member", err)
+	// Use repository to fetch member by user ID
+	member, msg, err := s.repo.FetchMemberByUserID(authUser.ID)
+	if err != nil {
+		status := http.StatusNotFound
+		if msg != "member not found for the given user ID" {
+			status = http.StatusInternalServerError
+		}
+		utils.RespondWithError(c, status, msg, err)
 		return
 	}
 
 	// Bind the incoming JSON request to CreateSavingRequest struct
 	var reqBody CreateSavingRequest
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
-		respondWithError(c, http.StatusBadRequest, "invalid request body", err)
+		utils.RespondWithError(c, http.StatusBadRequest, "invalid request body", err)
 		return
 	}
 
-	// Try to find an existing savings record for the member
-	var savings models.Savings
-	err := s.DB.Preload("Member").Where("member_id = ?", member.ID).First(&savings).Error
+	// Use repository to get or create savings
+	savings, created, msg, err := s.repo.GetOrCreateSavings(member, authUser.ID, reqBody.Amount, reqBody.Description)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// No existing savings found, create a new savings record
-			savings = models.Savings{
-				UserID:       authUser.ID,
-				MemberID:     member.ID,
-				Balance:      reqBody.Amount,
-				AmountToSave: reqBody.Amount,
-				Description:  reqBody.Description,
-			}
-			if err := s.DB.Create(&savings).Error; err != nil {
-				respondWithError(c, http.StatusInternalServerError, "failed to create savings record", err)
-				return
-			}
-		} else {
-			// Some other database error occurred
-			respondWithError(c, http.StatusInternalServerError, "failed to find savings record", err)
-			return
+		status := http.StatusInternalServerError
+		if created {
+			status = http.StatusInternalServerError
 		}
-	} else {
-		// Savings record exists, update its balance and other fields
+		utils.RespondWithError(c, status, msg, err)
+		return
+	}
+
+	if !created {
+		// Savings record exists, update its balance and other fields using repository
 		savings.Balance += reqBody.Amount
 		savings.AmountToSave = reqBody.Amount
 		savings.Description = reqBody.Description
-
-		if err := s.DB.Save(&savings).Error; err != nil {
-			respondWithError(c, http.StatusInternalServerError, "failed to update savings record", err)
+		if err := s.repo.UpdateSavings(savings); err != nil {
+			utils.RespondWithError(c, http.StatusInternalServerError, "failed to update savings record", err)
 			return
 		}
 	}
 
-	// Create a new saving transaction history
-	transaction := models.SavingTransaction{
+	// Create a new saving transaction history using repository
+	transaction := &models.SavingTransaction{
 		SavingsID:   savings.ID,
 		MemberID:    member.ID,
 		Amount:      reqBody.Amount,
 		Description: reqBody.Description,
 	}
-
-	if err := s.DB.Create(&transaction).Error; err != nil {
-		respondWithError(c, http.StatusInternalServerError, "failed to create transaction record", err)
+	if err := s.repo.CreateTransaction(transaction); err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, "failed to create transaction record", err)
 		return
 	}
 
@@ -107,21 +109,20 @@ func (s *SavingsHandler) GetSavingByID(c *gin.Context) {
 	// Get authenticated user from context
 	authUser, ok := getAuthUser(c)
 	if !ok {
-		respondWithError(c, http.StatusUnauthorized, "unauthenticated user", nil)
+		utils.RespondWithError(c, http.StatusUnauthorized, "unauthenticated user", nil)
 		return
 	}
 
-	// Get the member ID from the URL parameter
-	member, err := getMemberByIDAndAuthorize(c, s.DB, &authUser)
+	// Get the member ID from the URL parameter using MemberRepo
+	member, err := getMemberByIDAndAuthorize(c, s.MemberRepo, &authUser)
 	if err != nil {
 		return
 	}
 
-	// Find the savings associated with the member
-	var savings models.Savings
-	if err := s.DB.Preload("Member").Where("member_id = ?", member.ID).First(&savings).Error; err != nil {
-		// If unable to find savings record, respond with an error
-		respondWithError(c, http.StatusInternalServerError, "failed to get member savings", err)
+	// Use repository to get savings by member ID
+	savings, err := s.repo.GetSavingsByMemberID(member.ID)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, "failed to get member savings", err)
 		return
 	}
 
@@ -135,75 +136,67 @@ func (s *SavingsHandler) UpdateSavings(c *gin.Context) {
 	// get authenticated user
 	authUser, ok := getAuthUser(c)
 	if !ok {
-		respondWithError(c, http.StatusUnauthorized, "unauthenticated user", nil)
+		utils.RespondWithError(c, http.StatusUnauthorized, "unauthenticated user", nil)
 		return
 	}
 
-	member, err := getMemberByIDAndAuthorize(c, s.DB, &authUser)
+	member, err := getMemberByIDAndAuthorize(c, s.MemberRepo, &authUser)
 	if err != nil {
 		return
 	}
 
 	var savingsReq CreateSavingRequest
 	if err := c.ShouldBindJSON(&savingsReq); err != nil {
-		respondWithError(c, http.StatusBadRequest, "invalid request body", err)
+		utils.RespondWithError(c, http.StatusBadRequest, "invalid request body", err)
 		return
 	}
 
-	var savings models.Savings
-	if err := s.DB.Where("member_id = ?", member.ID).First(&savings).Error; err != nil {
-		respondWithError(c, http.StatusNotFound, "Savings record not found", err)
+	savings, err := s.repo.GetSavingsByMemberID(member.ID)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusNotFound, "Savings record not found", err)
 		return
 	}
 
 	// Prepare fields to update
-	updateFields := make(map[string]interface{})
 	if savingsReq.Amount != 0 {
-		updateFields["amount"] = savingsReq.Amount
-
+		savings.AmountToSave = savingsReq.Amount
 	}
 	if savingsReq.Description != "" {
-		updateFields["description"] = savingsReq.Description
+		savings.Description = savingsReq.Description
 	}
 
 	// Update the savings
-	if err := s.DB.Model(&savings).Updates(updateFields).Error; err != nil {
-		respondWithError(c, http.StatusInternalServerError, "Failed to update savings record", err)
+	if err := s.repo.UpdateSavings(savings); err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to update savings record", err)
 		return
 	}
 
-	s.DB.Preload("User").Preload("Member").Where("member_id = ?", member.ID).First(&savings)
 	c.JSON(http.StatusOK, gin.H{
 		"savings": savings,
 	})
-
 }
 
 func (s *SavingsHandler) DeleteSavings(c *gin.Context) {
-
 	authUser, ok := getAuthUser(c)
 	if !ok {
-		respondWithError(c, http.StatusUnauthorized, "unauthenticated user", nil)
+		utils.RespondWithError(c, http.StatusUnauthorized, "unauthenticated user", nil)
 		return
 	}
 
-	//
-	member, err := getMemberByIDAndAuthorize(c, s.DB, &authUser)
+	member, err := getMemberByIDAndAuthorize(c, s.MemberRepo, &authUser)
 	if err != nil {
 		return
 	}
 
-	// find the savings record associated with the user
-	var savings models.Savings
-	if err := s.DB.Where("member_id = ?", member.ID).First(&savings).Error; err != nil {
-		respondWithError(c, http.StatusNotFound, "Savings record not found", err)
+	savings, err := s.repo.GetSavingsByMemberID(member.ID)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusNotFound, "Savings record not found", err)
 		return
-
 	}
 
-	// delete the savings record
-	if err := s.DB.Delete(&savings).Error; err != nil {
-		respondWithError(c, http.StatusInternalServerError, "failed to delete savings", err)
+	// delete the savings record using repository
+	if err := s.repo.DeleteSavings(savings); err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, "failed to delete savings record", err)
 		return
 	}
 
@@ -212,26 +205,24 @@ func (s *SavingsHandler) DeleteSavings(c *gin.Context) {
 		"message": "Savings record deleted successfully",
 		"deleted": savings,
 	})
-
 }
 
 func (s *SavingsHandler) GetTransactionsForMember(c *gin.Context) {
-
 	// get authenticated user
 	authUser, ok := getAuthUser(c)
 	if !ok || authUser.Role != "admin" {
-		respondWithError(c, http.StatusForbidden, "you are not authorized to view all members", nil)
+		utils.RespondWithError(c, http.StatusForbidden, "you are not authorized to view transactions", nil)
 		return
 	}
 
-	member, err := getMemberByIDAndAuthorize(c, s.DB, &authUser)
+	member, err := getMemberByIDAndAuthorize(c, s.MemberRepo, &authUser)
 	if err != nil {
 		return
 	}
 
-	var transactions []models.SavingTransaction
-	if err := s.DB.Where("member_id = ?", member.ID).Find(&transactions).Error; err != nil {
-		respondWithError(c, http.StatusInternalServerError, "failed to retrieve transactions", err)
+	transactions, err := s.repo.GetTransactionsByMemberID(member.ID)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, "failed to fetch transactions", err)
 		return
 	}
 
