@@ -20,6 +20,11 @@ type UserHandler struct {
 	UserRepo *repository.UserRepository
 }
 
+type UserService interface {
+	Signup(c *gin.Context)
+	Login(c *gin.Context)
+}
+
 func NewUserHandler(db *gorm.DB) *UserHandler {
 	return &UserHandler{
 		UserRepo: repository.NewUserRepository(db),
