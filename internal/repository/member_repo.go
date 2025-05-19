@@ -94,3 +94,15 @@ func (r *MemberRepository) Delete(member *models.Member) (*models.Member, string
 
 	return member, "member deleted successfully", nil
 }
+
+// FetchMemberByUserID retrieves a member by their UserID
+func (r *MemberRepository) FetchMemberByUserID(userID uint) (*models.Member, string, error) {
+	var member models.Member
+	if err := r.db.Where("user_id = ?", userID).First(&member).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "member not found for the given user ID", err
+		}
+		return nil, "failed to fetch member by user ID", err
+	}
+	return &member, "member fetched successfully", nil
+}
