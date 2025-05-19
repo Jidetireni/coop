@@ -9,23 +9,28 @@ import (
 	"gorm.io/gorm"
 )
 
-type servicehandlers struct {
+// Handlers struct holds all handler instances
+// Renamed from servicehandlers to Handlers for clarity and Go conventions
+type Handlers struct {
 	UserService    handlers.UserService
 	MemberService  handlers.MemberService
 	SavingsService handlers.SavingsService
 }
 
-func Newhandlers(db *gorm.DB) *servicehandlers {
-	return &servicehandlers{
-		UserService:    &handlers.UserHandler{DB: db},
-		MemberService:  &handlers.MemberHandler{DB: db},
-		SavingsService: &handlers.SavingsHandler{DB: db},
+// NewHandlers creates new handler instances
+// Renamed from Newhandlers to NewHandlers for Go conventions
+// Updated to use NewUserHandler, NewMemberHandler, and NewSavingsHandler constructors
+func NewHandlers(db *gorm.DB) *Handlers {
+	return &Handlers{
+		UserService:    handlers.NewUserHandler(db),
+		MemberService:  handlers.NewMemberHandler(db),
+		SavingsService: handlers.NewSavingsHandler(db),
 	}
 }
 
 func SetUpRoute(router *gin.Engine) {
 	db := config.DB
-	handler := Newhandlers(db)
+	handler := NewHandlers(db)
 
 	router.POST("/signup", handler.UserService.Signup)
 	router.POST("/login", handler.UserService.Login)
