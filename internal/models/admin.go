@@ -4,6 +4,6 @@ import "gorm.io/gorm"
 
 type Admin struct {
 	gorm.Model
-	UserID uint
+	UserID uint `gorm:"unique"`
 	User   User
 }
