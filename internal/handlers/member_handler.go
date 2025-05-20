@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type MemberRequestBody struct {
@@ -17,12 +16,12 @@ type MemberRequestBody struct {
 
 type MemberHandler struct {
 	// DB *gorm.DB
-	MemberRepo *repository.MemberRepository
+	MemberRepo repository.MemberRepository
 }
 
-func NewMemberHandler(db *gorm.DB) *MemberHandler {
+func NewMemberHandler(memberRepo repository.MemberRepository) *MemberHandler {
 	return &MemberHandler{
-		MemberRepo: repository.NewMemberRepository(db),
+		MemberRepo: memberRepo,
 	}
 }
 
@@ -88,10 +87,13 @@ func (m *MemberHandler) CreateMember(c *gin.Context) {
 		return
 	}
 
+	memberReponse := models.NewMemberResponse(createdMember)
+	savingsResponse := models.NewSavingsResponse(createdSavings)
+
 	// Return the newly created member and savings
 	utils.SuccessResponse(c, http.StatusCreated, "member created successfully", "data", gin.H{
-		"member":  createdMember,
-		"savings": createdSavings,
+		"member":  memberReponse,
+		"savings": savingsResponse,
 	})
 }
 
@@ -105,14 +107,22 @@ func (m *MemberHandler) GetAllMembers(c *gin.Context) {
 
 	// fetch all members with their linked users
 	var members []models.Member
-	CreatedMember, message, err := m.MemberRepo.FetchAll(members)
+	fetchedMembersList, message, err := m.MemberRepo.FetchAll(members)
 	if err != nil {
 		utils.RespondWithError(c, http.StatusInternalServerError, message, err)
 		return
 	}
 
+	memberReponses := make([]models.MemberResponse, len(fetchedMembersList))
+	for i, member := range fetchedMembersList {
+		currentMember := member
+		memberReponses[i] = models.NewMemberResponse(&currentMember)
+	}
+
 	// send response
-	utils.SuccessResponse(c, http.StatusOK, message, "data", CreatedMember)
+	utils.SuccessResponse(c, http.StatusOK, message, "data", gin.H{
+		"members": memberReponses,
+	})
 }
 
 func (m *MemberHandler) GetMemberByID(c *gin.Context) {
@@ -128,8 +138,11 @@ func (m *MemberHandler) GetMemberByID(c *gin.Context) {
 		return
 	}
 
+	memberResponse := models.NewMemberResponse(member)
 	// Return the member
-	utils.SuccessResponse(c, http.StatusOK, "retrieved member by id successfully", "data", member)
+	utils.SuccessResponse(c, http.StatusOK, "retrieved member by id successfully", "data", gin.H{
+		"member": memberResponse,
+	})
 }
 
 func (m *MemberHandler) UpdateAMember(c *gin.Context) {
@@ -173,7 +186,10 @@ func (m *MemberHandler) UpdateAMember(c *gin.Context) {
 		return
 	}
 
-	utils.SuccessResponse(c, http.StatusOK, "updated member successfully", "data", updateMember)
+	memberResponse := models.NewMemberResponse(updateMember)
+	utils.SuccessResponse(c, http.StatusOK, "updated member successfully", "data", gin.H{
+		"member": memberResponse,
+	})
 }
 
 func (m *MemberHandler) DeleteAMember(c *gin.Context) {
@@ -196,5 +212,6 @@ func (m *MemberHandler) DeleteAMember(c *gin.Context) {
 		return
 	}
 
-	utils.SuccessResponse(c, http.StatusOK, "deleted member successfully", "data", deleteMember)
+	memberResponse := models.NewMemberResponse(deleteMember)
+	utils.SuccessResponse(c, http.StatusOK, "deleted member successfully", "data", memberResponse)
 }
