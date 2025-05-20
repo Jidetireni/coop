@@ -4,28 +4,40 @@ import (
 	"cooperative-system/internal/config"
 	"cooperative-system/internal/handlers"
 	"cooperative-system/internal/middleware"
+	"cooperative-system/internal/repository"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// Handlers struct holds all handler instances
-// Renamed from servicehandlers to Handlers for clarity and Go conventions
 type Handlers struct {
 	UserService    handlers.UserService
 	MemberService  handlers.MemberService
 	SavingsService handlers.SavingsService
+	LoanService    handlers.LoanService
+	AdminService   handlers.AdminService
 }
 
 // NewHandlers creates new handler instances
 // Renamed from Newhandlers to NewHandlers for Go conventions
 // Updated to use NewUserHandler, NewMemberHandler, and NewSavingsHandler constructors
 func NewHandlers(db *gorm.DB) *Handlers {
+
+	userRepo := repository.NewUserRepository(db)
+	memberRepo := repository.NewMGormemberRepository(db)
+	savingsRepo := repository.NewgormSavingsRepository(db)
+	loanRepo := repository.NewGormLoanRepository(db)
+
+	adminHandler := handlers.NewAdminHandler(userRepo, memberRepo)
+
 	return &Handlers{
-		UserService:    handlers.NewUserHandler(db),
-		MemberService:  handlers.NewMemberHandler(db),
-		SavingsService: handlers.NewSavingsHandler(db),
+		UserService:    handlers.NewUserHandler(userRepo),
+		MemberService:  handlers.NewMemberHandler(memberRepo),
+		SavingsService: handlers.NewSavingsHandler(savingsRepo, memberRepo),
+		LoanService:    handlers.NewLoanHandler(loanRepo, memberRepo),
+		AdminService:   adminHandler,
 	}
+
 }
 
 func SetUpRoute(router *gin.Engine) {
@@ -58,9 +70,16 @@ func SetUpRoute(router *gin.Engine) {
 	adminGroup := router.Group("/api/v1/admins")
 	adminGroup.Use(middleware.RequireAuth, middleware.RequireAdmin)
 	{
-		adminGroup.POST("", handlers.CreateAdmin)
+		adminGroup.POST("", handler.AdminService.CreateAdmin)
+		adminGroup.DELETE("", handler.AdminService.DeleteMember)
 		adminGroup.GET("/members", handler.MemberService.GetAllMembers)
 		adminGroup.GET("/savings/:id", handler.SavingsService.GetTransactionsForMember)
+	}
+
+	loanGroup := router.Group("/api/v1/loans")
+	loanGroup.Use(middleware.RequireAuth)
+	{
+		loanGroup.POST("", handler.LoanService.ApplyLoan)
 	}
 
 }
