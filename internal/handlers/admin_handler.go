@@ -76,7 +76,7 @@ func (h *AdminHandler) CreateAdmin(c *gin.Context) {
 	userToPromote, msg, err := h.userRepo.FindUserByEmail(reqBody.Email)
 	if err != nil {
 		if userToPromote == nil {
-			utils.RespondWithError(c, http.StatusNotFound, msg, nil)
+			utils.RespondWithError(c, http.StatusNotFound, msg, err)
 		} else {
 			utils.RespondWithError(c, http.StatusInternalServerError, "error finding user: "+msg, err)
 		}
@@ -86,7 +86,7 @@ func (h *AdminHandler) CreateAdmin(c *gin.Context) {
 	promotedUser, msg, err := h.userRepo.UpdateUser(userToPromote, "admin")
 	if err != nil {
 		if promotedUser == nil {
-			utils.RespondWithError(c, http.StatusNotFound, msg, nil)
+			utils.RespondWithError(c, http.StatusNotFound, msg, err)
 		} else {
 			utils.RespondWithError(c, http.StatusInternalServerError, "error promoting user: "+msg, err)
 		}
