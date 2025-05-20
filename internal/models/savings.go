@@ -8,10 +8,11 @@ import (
 
 type Savings struct {
 	gorm.Model
-	UserID       uint `gorm:"not null"`
-	MemberID     uint `gorm:"not null"`
-	Balance      int  `gorm:"not null"`
-	AmountToSave int  `gorm:"not null"`
+	UserID       uint   `gorm:"not null"`
+	MemberID     uint   `gorm:"not null"`
+	Balance      int    `gorm:"not null"`
+	AmountToSave int    `gorm:"not null"`
+	Member       Member `gorm:"foreignKey:MemberID"`
 	Description  string
 }
 
@@ -22,7 +23,7 @@ type SavingTransaction struct {
 	Amount      int  `gorm:"not null"`
 	Description string
 	// TransactionDate time.Time
-	Savings Savings
+	Savings Savings `gorm:"foreignKey:SavingID"`
 }
 
 type SavingsResponse struct {
