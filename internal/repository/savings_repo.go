@@ -7,16 +7,16 @@ import (
 	"gorm.io/gorm"
 )
 
-type SavingsRepository struct {
+type gormSavingsRepository struct {
 	db *gorm.DB
 }
 
-func NewSavingsRepository(db *gorm.DB) *SavingsRepository {
-	return &SavingsRepository{db: db}
+func NewgormSavingsRepository(db *gorm.DB) *gormSavingsRepository {
+	return &gormSavingsRepository{db: db}
 }
 
 // CreateSavingsEntry creates a new savings record in the database within a transaction
-func (r *SavingsRepository) CreateSavingsEntry(savings *models.Savings) (*models.Savings, string, error) {
+func (r *gormSavingsRepository) CreateSavingsEntry(savings *models.Savings) (*models.Savings, string, error) {
 	// Start a transaction
 	tx := r.db.Begin()
 	defer func() {
@@ -43,11 +43,8 @@ func (r *SavingsRepository) CreateSavingsEntry(savings *models.Savings) (*models
 	return savings, "savings entry created successfully", nil
 }
 
-// FetchMemberByUserID fetches a member by their user ID.
-// This function replaces the previous FetchMemberUserID, which was buggy.
-// It's now a method of SavingsRepository, uses r.db, declares the member variable,
 // takes userID uint as a parameter, and handles gorm.ErrRecordNotFound.
-func (r *SavingsRepository) FetchMemberByUserID(userID uint) (*models.Member, string, error) {
+func (r *gormSavingsRepository) FetchMemberByUserID(userID uint) (*models.Member, string, error) {
 	var member models.Member
 	// Assuming 'user_id' is the foreign key column in the members table referencing the users table.
 	if err := r.db.Where("user_id = ?", userID).First(&member).Error; err != nil {
@@ -60,7 +57,7 @@ func (r *SavingsRepository) FetchMemberByUserID(userID uint) (*models.Member, st
 }
 
 // GetOrCreateSavings fetches an existing savings record or creates a new one for a member
-func (r *SavingsRepository) GetOrCreateSavings(member *models.Member, userID uint, amount int, description string) (*models.Savings, bool, string, error) {
+func (r *gormSavingsRepository) GetOrCreateSavings(member *models.Member, userID uint, amount int, description string) (*models.Savings, bool, string, error) {
 	var savings models.Savings
 	err := r.db.Preload("Member").Where("member_id = ?", member.ID).First(&savings).Error
 	if err != nil {
@@ -85,36 +82,54 @@ func (r *SavingsRepository) GetOrCreateSavings(member *models.Member, userID uin
 }
 
 // UpdateSavings updates an existing savings record
-func (r *SavingsRepository) UpdateSavings(savings *models.Savings) error {
-	return r.db.Save(savings).Error
+func (r *gormSavingsRepository) UpdateSavings(savings *models.Savings, updatedData interface{}) (*models.Savings, string, error) {
+	if err := r.db.Model(&savings).Updates(updatedData).Error; err != nil {
+		return nil, "failed to update savings", err
+	}
+
+	return savings, "savings updated successfully", nil
+
 }
 
 // CreateTransaction creates a new saving transaction record
-func (r *SavingsRepository) CreateTransaction(transaction *models.SavingTransaction) error {
-	return r.db.Create(transaction).Error
+func (r *gormSavingsRepository) CreateTransaction(transaction *models.SavingTransaction) (*models.SavingTransaction, string, error) {
+	if err := r.db.Create(transaction).Error; err != nil {
+		return nil, "failed to create transaction", err
+	}
+	return transaction, "transaction created successfully", nil
 }
 
 // GetSavingsByMemberID fetches a savings record by member ID
-func (r *SavingsRepository) GetSavingsByMemberID(memberID uint) (*models.Savings, error) {
+func (r *gormSavingsRepository) GetSavingsByMemberID(memberID uint) (*models.Savings, string, error) {
 	var savings models.Savings
-	err := r.db.Preload("Member").Where("member_id = ?", memberID).First(&savings).Error
+	err := r.db.Where("member_id = ?", memberID).First(&savings).Error
 	if err != nil {
-		return nil, err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "savings not found for the given member ID", err
+		}
+		return nil, "failed to fetch savings by member ID", err
 	}
-	return &savings, nil
+	return &savings, "savings fetched successfully", nil
 }
 
 // DeleteSavings deletes a savings record
-func (r *SavingsRepository) DeleteSavings(savings *models.Savings) error {
-	return r.db.Delete(savings).Error
+func (r *gormSavingsRepository) DeleteSavings(savings *models.Savings) (*models.Savings, string, error) {
+	if err := r.db.Delete(savings).Error; err != nil {
+		return nil, "failed to delete savings", err
+	}
+	return savings, "savings deleted successfully", nil
 }
 
 // GetTransactionsByMemberID fetches all transactions for a member
-func (r *SavingsRepository) GetTransactionsByMemberID(memberID uint) ([]models.SavingTransaction, error) {
+func (r *gormSavingsRepository) GetTransactionsByMemberID(memberID uint) ([]models.SavingTransaction, string, error) {
 	var transactions []models.SavingTransaction
 	err := r.db.Where("member_id = ?", memberID).Find(&transactions).Error
 	if err != nil {
-		return nil, err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "no transactions found for the given member ID", err
+		}
+		return nil, "failed to fetch transactions by member ID", err
 	}
-	return transactions, nil
+	return transactions, "transactions fetched successfully", nil
+
 }
