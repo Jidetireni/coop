@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 type RequestBody struct {
@@ -17,18 +16,18 @@ type RequestBody struct {
 }
 
 type UserHandler struct {
-	UserRepo *repository.UserRepository
+	UserRepo repository.UserRepository
+}
+
+func NewUserHandler(userRepo repository.UserRepository) *UserHandler {
+	return &UserHandler{
+		UserRepo: userRepo,
+	}
 }
 
 type UserService interface {
 	Signup(c *gin.Context)
 	Login(c *gin.Context)
-}
-
-func NewUserHandler(db *gorm.DB) *UserHandler {
-	return &UserHandler{
-		UserRepo: repository.NewUserRepository(db),
-	}
 }
 
 func (u *UserHandler) Signup(c *gin.Context) {
@@ -50,12 +49,18 @@ func (u *UserHandler) Signup(c *gin.Context) {
 		Role:     "member",
 	}
 
-	if err := u.UserRepo.CreateUser(&user); err != nil {
-		utils.RespondWithError(c, http.StatusBadRequest, "failed to create user", err)
+	createdUser, msg, err := u.UserRepo.CreateUser(&user)
+	if err != nil {
+		if createdUser == nil {
+			utils.RespondWithError(c, http.StatusBadRequest, msg, err)
+		} else {
+			utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
+		}
 		return
 	}
 
-	utils.SuccessResponse(c, http.StatusCreated, "user created successfully", "user", user)
+	data := models.NewUserResponse(createdUser)
+	utils.SuccessResponse(c, http.StatusCreated, "user created successfully", "user", data)
 }
 
 func (u *UserHandler) Login(c *gin.Context) {
@@ -65,9 +70,13 @@ func (u *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, err := u.UserRepo.FindUserByEmail(reqBody.Email)
+	user, msg, err := u.UserRepo.FindUserByEmail(reqBody.Email)
 	if err != nil || user.ID == 0 {
-		utils.RespondWithError(c, http.StatusUnauthorized, "user not found", err)
+		if user == nil {
+			utils.RespondWithError(c, http.StatusNotFound, msg, nil)
+		} else {
+			utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
+		}
 		return
 	}
 
