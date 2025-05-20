@@ -3,21 +3,22 @@ package repository
 import (
 	"cooperative-system/internal/models"
 	"errors"
+	"strconv"
 
 	"gorm.io/gorm"
 )
 
 // MemberRepository handles data access and transactions
-type MemberRepository struct {
+type gormMemberRepository struct {
 	db *gorm.DB
 }
 
 // NewMemberRepository creates a new member repository instance
-func NewMemberRepository(db *gorm.DB) *MemberRepository {
-	return &MemberRepository{db: db}
+func NewMGormemberRepository(db *gorm.DB) *gormMemberRepository {
+	return &gormMemberRepository{db: db}
 }
 
-func (r *MemberRepository) CreateMemberWithSavings(member *models.Member, savings *models.Savings) (*models.Member, *models.Savings, string, error) {
+func (r *gormMemberRepository) CreateMemberWithSavings(member *models.Member, savings *models.Savings) (*models.Member, *models.Savings, string, error) {
 	// Start a transaction
 	tx := r.db.Begin()
 	defer func() {
@@ -53,7 +54,7 @@ func (r *MemberRepository) CreateMemberWithSavings(member *models.Member, saving
 	return member, savings, "member created successfully", nil
 }
 
-func (r *MemberRepository) FetchAll(members []models.Member) ([]models.Member, string, error) {
+func (r *gormMemberRepository) FetchAll(members []models.Member) ([]models.Member, string, error) {
 
 	if err := r.db.Preload("User").Find(&members).Error; err != nil {
 		return nil, "failed to fetch members", err
@@ -63,22 +64,24 @@ func (r *MemberRepository) FetchAll(members []models.Member) ([]models.Member, s
 
 }
 
-func (r *MemberRepository) FetchByID(memberID string, member *models.Member) (*models.Member, string, error) {
-
-	err := r.db.Where("id = ?", memberID).First(&member).Error
+// In your GORM implementation for MemberRepositoryInterface
+func (r *gormMemberRepository) FetchByID(memberID string) (*models.Member, string, error) {
+	var member models.Member
+	// Convert memberID to uint if your primary key is uint
+	id, err := strconv.ParseUint(memberID, 10, 32)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, "member not found", err
-		} else {
-			return nil, "failed to fetch member", err
-		}
+		return nil, "invalid member ID format", err
 	}
-
-	return member, "member fetched successfully", nil
-
+	if err := r.db.First(&member, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "member not found", nil
+		}
+		return nil, "database error", err
+	}
+	return &member, "member fetched successfully", nil
 }
 
-func (r *MemberRepository) Update(member *models.Member, updateFields interface{}) (*models.Member, string, error) {
+func (r *gormMemberRepository) Update(member *models.Member, updateFields interface{}) (*models.Member, string, error) {
 
 	if err := r.db.Model(&member).Updates(updateFields).Error; err != nil {
 		return nil, "failed to update member", err
@@ -87,7 +90,7 @@ func (r *MemberRepository) Update(member *models.Member, updateFields interface{
 	return member, "member updated successfully", nil
 }
 
-func (r *MemberRepository) Delete(member *models.Member) (*models.Member, string, error) {
+func (r *gormMemberRepository) Delete(member *models.Member) (*models.Member, string, error) {
 	if err := r.db.Delete(&member).Error; err != nil {
 		return nil, "failed to delete member", err
 	}
@@ -96,7 +99,7 @@ func (r *MemberRepository) Delete(member *models.Member) (*models.Member, string
 }
 
 // FetchMemberByUserID retrieves a member by their UserID
-func (r *MemberRepository) FetchMemberByUserID(userID uint) (*models.Member, string, error) {
+func (r *gormMemberRepository) FetchMemberByUserID(userID uint) (*models.Member, string, error) {
 	var member models.Member
 	if err := r.db.Where("user_id = ?", userID).First(&member).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
