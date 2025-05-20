@@ -23,6 +23,7 @@ type Loan struct {
 	InstallmentAmount float64
 
 	TotalRepayableAmount float64
+	Member               Member `gorm:"foreignKey:MemberID"`
 }
 
 type LoanResponse struct {
