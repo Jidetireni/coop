@@ -94,7 +94,7 @@ func (u *UserHandler) Login(c *gin.Context) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("Authorization", tokenString, 3600*24*30, "", "", false, true)
 	utils.SuccessResponse(c, http.StatusOK, "login successful", "data", gin.H{
-		"userID": user.ID,
+		"user_id": user.ID,
 		"token":  tokenString,
 	})
 }
