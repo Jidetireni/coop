@@ -74,11 +74,11 @@ func (r *gormSavingsRepository) GetOrCreateSavings(member *models.Member, userID
 			if err != nil {
 				return nil, true, msg, err
 			}
-			return createdSavings, true, "savings created", nil
+			return createdSavings, true, "savings created", err
 		}
 		return nil, false, "failed to find savings record", err
 	}
-	return &savings, false, "savings found", nil
+	return &savings, false, "savings found", err
 }
 
 // UpdateSavings updates an existing savings record
