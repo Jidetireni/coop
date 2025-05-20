@@ -11,6 +11,7 @@ type Member struct {
 	UserID      uint   `gorm:"unique"`
 	Name        string `gorm:"not null"`
 	ContactInfo string `gorm:"not null"`
+	User        User   `gorm:"foreignKey:UserID"`
 }
 
 type MemberResponse struct {
