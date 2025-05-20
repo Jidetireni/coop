@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type CreateSavingRequest struct {
@@ -16,16 +15,14 @@ type CreateSavingRequest struct {
 }
 
 type SavingsHandler struct {
-	repo       *repository.SavingsRepository
-	DB         *gorm.DB // Add DB for legacy helpers like getMemberByIDAndAuthorize
-	MemberRepo *repository.MemberRepository
+	repo       repository.SavingsRepository
+	MemberRepo repository.MemberRepository
 }
 
-func NewSavingsHandler(db *gorm.DB) *SavingsHandler {
+func NewSavingsHandler(savingsRepo repository.SavingsRepository, memberRepo repository.MemberRepository) *SavingsHandler {
 	return &SavingsHandler{
-		repo:       repository.NewSavingsRepository(db),
-		DB:         db, // Set DB for legacy helpers
-		MemberRepo: repository.NewMemberRepository(db),
+		repo:       savingsRepo,
+		MemberRepo: memberRepo,
 	}
 }
 
@@ -74,35 +71,47 @@ func (s *SavingsHandler) CreateSavings(c *gin.Context) {
 		return
 	}
 
+	var finalSavingsState *models.Savings = savings
+
 	if !created {
 		// Savings record exists, update its balance and other fields using repository
-		savings.Balance += reqBody.Amount
-		savings.AmountToSave = reqBody.Amount
-		savings.Description = reqBody.Description
-		if err := s.repo.UpdateSavings(savings); err != nil {
-			utils.RespondWithError(c, http.StatusInternalServerError, "failed to update savings record", err)
+		updateData := map[string]interface{}{
+			"Balance":      savings.Balance + reqBody.Amount, // Calculate the new total balance
+			"AmountToSave": reqBody.Amount,                   // This seems to track the last amount saved
+			"Description":  reqBody.Description,              // Update with the new description
+		}
+
+		tempUpdatedSavings, msg, err := s.repo.UpdateSavings(savings, updateData)
+		if err != nil {
+			utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
 			return
 		}
+		finalSavingsState = tempUpdatedSavings
 	}
 
 	// Create a new saving transaction history using repository
 	transaction := &models.SavingTransaction{
-		SavingsID:   savings.ID,
+		SavingsID:   finalSavingsState.ID,
 		MemberID:    member.ID,
 		Amount:      reqBody.Amount,
 		Description: reqBody.Description,
 	}
-	if err := s.repo.CreateTransaction(transaction); err != nil {
-		utils.RespondWithError(c, http.StatusInternalServerError, "failed to create transaction record", err)
+
+	createdTransaction, msg, err := s.repo.CreateTransaction(transaction)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
 		return
 	}
 
+	savingsResponse := models.NewSavingsResponse(finalSavingsState)
+	transactionResponse := models.NewSavingTransactionResponse(createdTransaction)
+
 	// Respond with the updated savings and new transaction
-	c.JSON(http.StatusCreated, gin.H{
-		"message":     "Savings updated successfully",
-		"savings":     savings,
-		"transaction": transaction,
-	})
+	utils.SuccessResponse(c, http.StatusCreated, "savings created successfully", "data",
+		gin.H{
+			"savings":     savingsResponse,
+			"transaction": transactionResponse,
+		})
 }
 
 func (s *SavingsHandler) GetSavingByID(c *gin.Context) {
@@ -120,15 +129,17 @@ func (s *SavingsHandler) GetSavingByID(c *gin.Context) {
 	}
 
 	// Use repository to get savings by member ID
-	savings, err := s.repo.GetSavingsByMemberID(member.ID)
+	savings, msg, err := s.repo.GetSavingsByMemberID(member.ID)
 	if err != nil {
-		utils.RespondWithError(c, http.StatusInternalServerError, "failed to get member savings", err)
+		utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
 		return
 	}
 
+	savingsResponse := models.NewSavingsResponse(savings)
+
 	// Respond with the savings information
-	c.JSON(http.StatusOK, gin.H{
-		"savings": savings,
+	utils.SuccessResponse(c, http.StatusOK, "retrieved savings successfully", "data", gin.H{
+		"savings": savingsResponse,
 	})
 }
 
@@ -151,28 +162,31 @@ func (s *SavingsHandler) UpdateSavings(c *gin.Context) {
 		return
 	}
 
-	savings, err := s.repo.GetSavingsByMemberID(member.ID)
+	savings, msg, err := s.repo.GetSavingsByMemberID(member.ID)
 	if err != nil {
-		utils.RespondWithError(c, http.StatusNotFound, "Savings record not found", err)
+		utils.RespondWithError(c, http.StatusNotFound, msg, err)
 		return
 	}
 
+	updateData := make(map[string]interface{})
 	// Prepare fields to update
 	if savingsReq.Amount != 0 {
-		savings.AmountToSave = savingsReq.Amount
+		updateData["AmountToSave"] = savingsReq.Amount
 	}
 	if savingsReq.Description != "" {
-		savings.Description = savingsReq.Description
+		updateData["Description"] = savingsReq.Description
 	}
 
 	// Update the savings
-	if err := s.repo.UpdateSavings(savings); err != nil {
-		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to update savings record", err)
+	updatedSavings, msg, err := s.repo.UpdateSavings(savings, updateData)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"savings": savings,
+	savingsResponse := models.NewSavingsResponse(updatedSavings)
+	utils.SuccessResponse(c, http.StatusOK, "updated savings successfully", "data", gin.H{
+		"savings": savingsResponse,
 	})
 }
 
@@ -188,22 +202,22 @@ func (s *SavingsHandler) DeleteSavings(c *gin.Context) {
 		return
 	}
 
-	savings, err := s.repo.GetSavingsByMemberID(member.ID)
+	savings, msg, err := s.repo.GetSavingsByMemberID(member.ID)
 	if err != nil {
-		utils.RespondWithError(c, http.StatusNotFound, "Savings record not found", err)
+		utils.RespondWithError(c, http.StatusNotFound, msg, err)
 		return
 	}
 
 	// delete the savings record using repository
-	if err := s.repo.DeleteSavings(savings); err != nil {
-		utils.RespondWithError(c, http.StatusInternalServerError, "failed to delete savings record", err)
+	deletedSavings, msg, err := s.repo.DeleteSavings(savings)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
 		return
 	}
 
-	// response
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Savings record deleted successfully",
-		"deleted": savings,
+	savingsResponse := models.NewSavingsResponse(deletedSavings)
+	utils.SuccessResponse(c, http.StatusOK, "deleted savings successfully", "data", gin.H{
+		"savings": savingsResponse,
 	})
 }
 
@@ -220,14 +234,21 @@ func (s *SavingsHandler) GetTransactionsForMember(c *gin.Context) {
 		return
 	}
 
-	transactions, err := s.repo.GetTransactionsByMemberID(member.ID)
+	transactions, msg, err := s.repo.GetTransactionsByMemberID(member.ID)
 	if err != nil {
-		utils.RespondWithError(c, http.StatusInternalServerError, "failed to fetch transactions", err)
+		utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
 		return
 	}
 
-	// send response
-	c.JSON(http.StatusOK, gin.H{
-		"transactions": transactions,
+	transactionResponses := make([]models.SavingTransactionResponse, len(transactions))
+	for i, transaction := range transactions {
+		currentTransaction := transaction
+		transactionResponses[i] = models.NewSavingTransactionResponse(&currentTransaction)
+
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "retrieved transactions successfully", "data", gin.H{
+		"transactions": transactionResponses,
 	})
+
 }
