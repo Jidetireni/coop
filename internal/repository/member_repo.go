@@ -109,3 +109,19 @@ func (r *gormMemberRepository) FetchMemberByUserID(userID uint) (*models.Member,
 	}
 	return &member, "member fetched successfully", nil
 }
+
+func (r *gormMemberRepository) FetchMemberByID(tx *gorm.DB, memberID string) (*models.Member, string, error) {
+	var member models.Member
+	// Convert memberID to uint if your primary key is uint
+	id, err := strconv.ParseUint(memberID, 10, 32)
+	if err != nil {
+		return nil, "invalid member ID format", err
+	}
+	if err := tx.First(&member, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "member not found", nil
+		}
+		return nil, "database error", err
+	}
+	return &member, "member fetched successfully", nil
+}
