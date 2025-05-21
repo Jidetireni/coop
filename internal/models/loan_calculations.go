@@ -4,6 +4,12 @@ import (
 	"errors"
 )
 
+const (
+	MaxLoanToSavingsRatio = 2.0 // Maximum loan amount to savings ratio
+	MaxActiveLoans        = 1   // Maximum number of active loans allowed
+
+)
+
 func GetInterestRate(loanType string, loanTermMonths uint) float64 {
 	var calculatedInterestRate float64
 
@@ -44,4 +50,78 @@ func CalculateInstallmentAmount(totalRepayableAmount float64, loanTermMonths uin
 	}
 	installmentAmount := totalRepayableAmount / float64(loanTermMonths)
 	return installmentAmount, nil
+}
+
+func CheckLoanStatus(loan *Loan) (canProcess bool, message string, err error) {
+	if loan == nil {
+		return false, "loan data is nil", errors.New("cannot check status of nil loan")
+	}
+
+	switch loan.Status {
+	case LoanStatusPending: // Assuming LoanStatusPending is "pending"
+		return true, "Loan is pending and can be processed.", nil
+	case LoanStatusApproved:
+		return false, "Loan is already approved.", nil
+	case LoanStatusRejected:
+		return false, "Loan is already rejected.", nil
+	// case LoanStatusDisbursed:
+	//     return false, "Loan has already been disbursed.", nil
+	case LoanStatusPaid:
+		return false, "Loan has already been paid.", nil
+	case LoanStatusDefaulted:
+		return false, "Loan is defaulted.", nil
+	default:
+		return false, "Loan has an unknown or unprocessable status: " + loan.Status, errors.New("unprocessable loan status")
+	}
+}
+
+func CheckLoanEligibility(requestedLoan *Loan, member *Member, savings *Savings, existingLoans []Loan) (bool, []string, error) {
+
+	var reasons []string
+
+	if savings == nil {
+		reasons = append(reasons, "savings record not found")
+	} else {
+		loanLimit := savings.Balance * MaxLoanToSavingsRatio
+		if requestedLoan.Amount > float64(loanLimit) {
+			reasons = append(reasons, "requested loan exceeds twice the savings balance")
+		}
+	}
+
+	activeLoanCount := 0
+	hasDefaultedLoan := false
+
+	for _, exitstingLoan := range existingLoans {
+
+		if exitstingLoan.ID == requestedLoan.ID {
+			continue // Skip the current loan being processed
+		}
+
+		if exitstingLoan.Status == LoanStatusDefaulted {
+			hasDefaultedLoan = true
+		}
+
+		if exitstingLoan.Status == LoanStatusActive || exitstingLoan.Status == LoanStatusDisbursed || exitstingLoan.Status == LoanStatusApproved {
+			activeLoanCount++
+		}
+	}
+
+	if hasDefaultedLoan {
+		reasons = append(reasons, "member has a defaulted loan")
+	}
+
+	if activeLoanCount >= MaxActiveLoans {
+		reasons = append(reasons, "member has reached the maximum number of active loans")
+	}
+
+	if requestedLoan.Amount <= 0 {
+		reasons = append(reasons, "requested loan amount must be greater than zero")
+	}
+
+	if len(reasons) > 0 {
+		return false, reasons, errors.New("loan eligibility check failed")
+	}
+
+	return true, nil, nil
+
 }
