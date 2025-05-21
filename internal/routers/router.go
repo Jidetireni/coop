@@ -28,7 +28,7 @@ func NewHandlers(db *gorm.DB) *Handlers {
 	savingsRepo := repository.NewgormSavingsRepository(db)
 	loanRepo := repository.NewGormLoanRepository(db)
 
-	adminHandler := handlers.NewAdminHandler(userRepo, memberRepo)
+	adminHandler := handlers.NewAdminHandler(userRepo, memberRepo, savingsRepo, loanRepo)
 
 	return &Handlers{
 		UserService:    handlers.NewUserHandler(userRepo),
@@ -72,6 +72,7 @@ func SetUpRoute(router *gin.Engine) {
 	{
 		adminGroup.POST("", handler.AdminService.CreateAdmin)
 		adminGroup.DELETE("", handler.AdminService.DeleteMember)
+		adminGroup.PUT("/loans/:loan_id/approve", handler.AdminService.ApproveLoan)
 		adminGroup.GET("/members", handler.MemberService.GetAllMembers)
 		adminGroup.GET("/savings/:id", handler.SavingsService.GetTransactionsForMember)
 	}
