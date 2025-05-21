@@ -12,7 +12,8 @@ type MemberRepository interface {
 }
 
 type LoanRepository interface {
-	CreateLoanRequestObject(loan *models.Loan) (*models.Loan, error)
+	CreateLoanRequestObject(loan *models.Loan) (*models.Loan, string, error)
+	GetLoanByID(loanID string) (*models.Loan, string, error)
 }
 
 type UserRepository interface {
