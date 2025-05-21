@@ -147,7 +147,7 @@ func TestApplyLoan_RepoError(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "failed to apply for loan")
 }
 
-func TestTrackLoanApproval_Success(t *testing.T) {
+func TestGetLoanStatus_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	mockLoan := &mockLoanRepo{
 		GetLoanByIDFunc: func(loanID string) (*models.Loan, string, error) {
@@ -175,7 +175,7 @@ func TestTrackLoanApproval_Success(t *testing.T) {
 		user.Model.ID = 1
 		user.Role = "member"
 		c.Set("user", user)
-		h.TrackLoanApproval(c)
+		h.GetLoanStatus(c)
 	})
 	req, _ := http.NewRequest(http.MethodGet, "/loans/1", nil)
 	w := httptest.NewRecorder()
@@ -184,7 +184,7 @@ func TestTrackLoanApproval_Success(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "loan details fetched successfully")
 }
 
-func TestTrackLoanApproval_LoanNotFound(t *testing.T) {
+func TestGetLoanStatus_LoanNotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	mockLoan := &mockLoanRepo{
 		GetLoanByIDFunc: func(loanID string) (*models.Loan, string, error) {
@@ -206,7 +206,7 @@ func TestTrackLoanApproval_LoanNotFound(t *testing.T) {
 		user.Model.ID = 1
 		user.Role = "member"
 		c.Set("user", user)
-		h.TrackLoanApproval(c)
+		h.GetLoanStatus(c)
 	})
 	req, _ := http.NewRequest(http.MethodGet, "/loans/999", nil)
 	w := httptest.NewRecorder()
@@ -215,7 +215,7 @@ func TestTrackLoanApproval_LoanNotFound(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "loan not found")
 }
 
-func TestTrackLoanApproval_Unauthorized(t *testing.T) {
+func TestGetLoanStatus_Unauthorized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	mockLoan := &mockLoanRepo{
 		GetLoanByIDFunc: func(loanID string) (*models.Loan, string, error) {
@@ -243,7 +243,7 @@ func TestTrackLoanApproval_Unauthorized(t *testing.T) {
 		user.Model.ID = 1
 		user.Role = "member"
 		c.Set("user", user)
-		h.TrackLoanApproval(c)
+		h.GetLoanStatus(c)
 	})
 	req, _ := http.NewRequest(http.MethodGet, "/loans/1", nil)
 	w := httptest.NewRecorder()
@@ -252,11 +252,11 @@ func TestTrackLoanApproval_Unauthorized(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "you are not authorized to view this loan")
 }
 
-func TestTrackLoanApproval_Unauthenticated(t *testing.T) {
+func TestGetLoanStatus_Unauthenticated(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := handlers.NewLoanHandler(&mockLoanRepo{}, &mockMemberRepoForLoan{})
 	r := gin.Default()
-	r.GET("/loans/:loan_id", h.TrackLoanApproval) // No user set in context
+	r.GET("/loans/:loan_id", h.GetLoanStatus) // No user set in context
 	req, _ := http.NewRequest(http.MethodGet, "/loans/1", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
