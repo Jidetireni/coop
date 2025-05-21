@@ -1,6 +1,10 @@
 package repository
 
-import "cooperative-system/internal/models"
+import (
+	"cooperative-system/internal/models"
+
+	"gorm.io/gorm"
+)
 
 type MemberRepository interface {
 	CreateMemberWithSavings(member *models.Member, savings *models.Savings) (*models.Member, *models.Savings, string, error)
@@ -9,11 +13,20 @@ type MemberRepository interface {
 	Update(member *models.Member, updateFields interface{}) (*models.Member, string, error)
 	Delete(member *models.Member) (*models.Member, string, error)
 	FetchMemberByUserID(userID uint) (*models.Member, string, error)
+	FetchMemberByID(tx *gorm.DB, memberID string) (*models.Member, string, error)
 }
 
 type LoanRepository interface {
-	CreateLoanRequestObject(loan *models.Loan) (*models.Loan, string, error)
+	CreateLoanWithInitialHistory(loan *models.Loan, loanHistory *models.LoanHistory) (*models.Loan, *models.LoanHistory, string, error)
 	GetLoanByID(loanID string) (*models.Loan, string, error)
+	GetLoanHistoryByID(loanID string) ([]models.LoanHistory, string, error)
+	BeginTransaction() *gorm.DB
+	// RollbackTransaction(tx *gorm.DB)
+	// CommitTransaction(tx *gorm.DB) error
+	GetLoanByIDForUpdate(tx *gorm.DB, loanID string) (*models.Loan, string, error)
+	GetAllLoansByMemberID(tx *gorm.DB, memberID uint) ([]models.Loan, string, error)
+	UpdateLoan(tx *gorm.DB, loan *models.Loan) (*models.Loan, string, error)
+	CreateLoanHistory(tx *gorm.DB, loanHistory *models.LoanHistory) error
 }
 
 type UserRepository interface {
@@ -31,4 +44,5 @@ type SavingsRepository interface {
 	GetSavingsByMemberID(memberID uint) (*models.Savings, string, error)
 	DeleteSavings(savings *models.Savings) (*models.Savings, string, error)
 	GetTransactionsByMemberID(memberID uint) ([]models.SavingTransaction, string, error)
+	GetSavingsByMemberIDTx(tx *gorm.DB, memberID uint) (*models.Savings, string, error)
 }
