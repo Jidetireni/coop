@@ -133,3 +133,16 @@ func (r *gormSavingsRepository) GetTransactionsByMemberID(memberID uint) ([]mode
 	return transactions, "transactions fetched successfully", nil
 
 }
+
+// GetSavingsByMemberIDTx fetches a savings record by member ID within a transaction
+func (r *gormSavingsRepository) GetSavingsByMemberIDTx(tx *gorm.DB, memberID uint) (*models.Savings, string, error) {
+	var savings models.Savings
+	err := tx.Where("member_id = ?", memberID).First(&savings).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "savings not found for the given member ID", err
+		}
+		return nil, "failed to fetch savings by member ID", err
+	}
+	return &savings, "savings fetched successfully", nil
+}
