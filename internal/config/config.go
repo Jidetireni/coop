@@ -43,4 +43,5 @@ func SyncDB() {
 	DB.AutoMigrate(&models.Savings{})
 	DB.AutoMigrate(&models.SavingTransaction{})
 	DB.AutoMigrate(&models.Loan{})
+	DB.AutoMigrate(&models.LoanHistory{})
 }
