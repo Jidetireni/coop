@@ -80,6 +80,7 @@ func SetUpRoute(router *gin.Engine) {
 	loanGroup.Use(middleware.RequireAuth)
 	{
 		loanGroup.POST("", handler.LoanService.ApplyLoan)
+		loanGroup.GET("/:loan_id", handler.LoanService.TrackLoanApproval)
 	}
 
 }
