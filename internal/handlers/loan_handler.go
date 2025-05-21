@@ -31,6 +31,7 @@ func NewLoanHandler(loanRepo repository.LoanRepository, memberRepo repository.Me
 
 type LoanService interface {
 	ApplyLoan(c *gin.Context)
+	TrackLoanApproval(c *gin.Context)
 }
 
 func (l *LoanHandler) ApplyLoan(c *gin.Context) {
@@ -92,21 +93,63 @@ func (l *LoanHandler) ApplyLoan(c *gin.Context) {
 		MemberID:             member.ID,
 		InterestRate:         calculatedInterestRate,
 		Status:               "pending",
+		Type:                 reqBody.Type,
 		LoanTermMonths:       reqBody.LoanTermMonths,
 		TotalRepayableAmount: totalRepayableAmount,
 		InstallmentAmount:    installmentAmount,
 	}
 
 	// Call the repository method to create a new loan
-	createdLoan, err := l.repo.CreateLoanRequestObject(&loan)
+	createdLoan, msg, err := l.repo.CreateLoanRequestObject(&loan)
 	if err != nil {
-		utils.RespondWithError(c, http.StatusInternalServerError, "failed to apply for loan", err)
+		utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
 		return
 	}
 
 	loanResponse := models.NewLoanResponse(createdLoan)
 
 	utils.SuccessResponse(c, http.StatusCreated, "loan application submitted successfully", "data", gin.H{
+		"loan": loanResponse,
+	})
+
+}
+
+func (l *LoanHandler) TrackLoanApproval(c *gin.Context) {
+	loanID := c.Param("loan_id")
+	if loanID == "" {
+		utils.RespondWithError(c, http.StatusBadRequest, "loan ID is required", nil)
+		return
+	}
+
+	authUser, ok := getAuthUser(c)
+	if !ok {
+		utils.RespondWithError(c, http.StatusUnauthorized, "unauthenticated user", nil)
+		return
+	}
+
+	loan, msg, err := l.repo.GetLoanByID(loanID)
+	if err != nil {
+		if loan == nil {
+			utils.RespondWithError(c, http.StatusNotFound, msg, err)
+		} else {
+			utils.RespondWithError(c, http.StatusInternalServerError, "error fetching loan: "+msg, err)
+		}
+		return
+	}
+
+	member, msg, err := l.memberRepo.FetchMemberByUserID(authUser.ID)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, msg, err)
+		return
+	}
+
+	if loan.MemberID != member.ID {
+		utils.RespondWithError(c, http.StatusForbidden, "you are not authorized to view this loan", nil)
+		return
+	}
+
+	loanResponse := models.NewLoanResponse(loan)
+	utils.SuccessResponse(c, http.StatusOK, "loan details fetched successfully", "data", gin.H{
 		"loan": loanResponse,
 	})
 
