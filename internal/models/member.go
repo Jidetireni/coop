@@ -12,6 +12,7 @@ type Member struct {
 	Name        string `gorm:"not null"`
 	ContactInfo string `gorm:"not null"`
 	User        User   `gorm:"foreignKey:UserID"`
+	Status      string `gorm:"default:'active'"`
 }
 
 type MemberResponse struct {
@@ -22,6 +23,7 @@ type MemberResponse struct {
 	Name        string `json:"name"`
 	ContactInfo string `json:"contact_info"`
 	UserID      uint   `json:"user_id"`
+	Status      string `json:"status"`
 }
 
 func NewMemberResponse(member *Member) MemberResponse {
@@ -32,5 +34,6 @@ func NewMemberResponse(member *Member) MemberResponse {
 		Name:        member.Name,
 		ContactInfo: member.ContactInfo,
 		UserID:      member.UserID,
+		Status:      member.Status,
 	}
 }
